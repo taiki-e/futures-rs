@@ -78,16 +78,20 @@
 // happens-before semantics required for the acquire / release semantics used
 // by the queue structure.
 
+use alloc::sync::Arc;
+use core::fmt;
+use core::pin::Pin;
+use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::Ordering::SeqCst;
 use futures_core::stream::{FusedStream, Stream};
 use futures_core::task::{Context, Poll, Waker};
 use futures_core::task::__internal::AtomicWaker;
-use std::fmt;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::SeqCst;
+#[cfg(feature = "std")]
+use std::sync::Mutex;
 
 use crate::mpsc::queue::Queue;
+#[cfg(not(feature = "std"))]
+use crate::lock::Mutex;
 
 mod queue;
 #[cfg(feature = "sink")]
@@ -186,6 +190,7 @@ impl fmt::Display for SendError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for SendError {}
 
 impl SendError {
@@ -261,6 +266,7 @@ impl fmt::Display for TryRecvError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for TryRecvError {}
 
 #[derive(Debug)]

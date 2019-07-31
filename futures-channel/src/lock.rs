@@ -87,12 +87,35 @@ impl<T> Drop for TryLock<'_, T> {
     }
 }
 
+impl<T> Lock<T> {
+    // In the `no_std` environment, use own spinlock mutex because it cannot use the OS provided mutex.
+    /// Acquires a mutex, spinning the current thread until it is able to do
+    /// so.
+    ///
+    /// This method is absolutely successful, but it returns `Result`
+    /// because it needs to have the same signature as
+    /// `std::sync::Mutex::lock`.
+    #[cfg(any(not(feature = "std"), test))]
+    pub(crate) fn lock(&self) -> Result<TryLock<'_, T>, core::convert::Infallible> {
+        use core::sync::atomic::{self, Ordering};
+
+        while self.locked.compare_and_swap(false, true, SeqCst) {
+            // Wait until the lock looks unlocked before retrying.
+            // See https://github.com/mvdnes/spin-rs/pull/33 for more.
+            while self.locked.load(Ordering::Relaxed) {
+                atomic::spin_loop_hint();
+            }
+        }
+        Ok(TryLock { __ptr: self })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Lock;
 
     #[test]
-    fn smoke() {
+    fn smoke_try_lock() {
         let a = Lock::new(1);
         let mut a1 = a.try_lock().unwrap();
         assert!(a.try_lock().is_none());
@@ -101,5 +124,12 @@ mod tests {
         drop(a1);
         assert_eq!(*a.try_lock().unwrap(), 2);
         assert_eq!(*a.try_lock().unwrap(), 2);
+    }
+
+    #[test]
+    fn smoke_lock() {
+        let m = Lock::new(());
+        drop(m.lock().unwrap());
+        drop(m.lock().unwrap());
     }
 }
