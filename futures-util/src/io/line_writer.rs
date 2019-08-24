@@ -4,6 +4,7 @@ use futures_io::AsyncWrite;
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 use std::fmt;
 use std::io;
+use std::mem;
 use std::pin::Pin;
 
 /// Wraps a writer and buffers output to it, flushing whenever a newline
@@ -73,11 +74,13 @@ use std::pin::Pin;
 pub struct LineWriter<W> {
     inner: BufWriter<W>,
     need_flush: bool,
+    written: usize,
 }
 
 impl<W: AsyncWrite> LineWriter<W> {
     unsafe_pinned!(inner: BufWriter<W>);
     unsafe_unpinned!(need_flush: bool);
+    unsafe_unpinned!(written: usize);
 
     /// Creates a new `LineWriter`.
     pub fn new(inner: W) -> Self {
@@ -91,6 +94,7 @@ impl<W: AsyncWrite> LineWriter<W> {
         Self {
             inner: BufWriter::with_capacity(capacity, inner),
             need_flush: false,
+            written: 0,
         }
     }
 
@@ -130,12 +134,19 @@ impl<W: AsyncWrite> LineWriter<W> {
 
 impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        if self.need_flush {
-            ready!(self.as_mut().poll_flush(cx))?;
+        let Self {
+            inner,
+            need_flush,
+            written,
+        } = unsafe { self.get_unchecked_mut() };
+        let mut inner = unsafe { Pin::new_unchecked(inner) };
+
+        if *need_flush {
+            ready!(inner.as_mut().poll_flush(cx))?;
         }
 
         // Find the last newline character in the buffer provided. If found then
@@ -143,7 +154,9 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
         // otherwise we just write the whole block to the underlying writer.
         let i = match memchr::memrchr(b'\n', buf) {
             Some(i) => i,
-            None => return self.inner().poll_write(cx, buf),
+            None => {*written = ready!(inner.poll_write(cx, &buf[*written..])?);
+            return Poll::Ready(Ok(mem::replace(written, 0)));
+            },
         };
 
         // Ok, we're going to write a partial amount of the data given first
@@ -151,10 +164,20 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
         // some data then we *must* report that we wrote that data, so future
         // errors are ignored. We set our internal `need_flush` flag, though, in
         // case flushing fails and we need to try it first next time.
-        let n = ready!(self.as_mut().inner().poll_write(cx, &buf[..=i]))?;
-        *self.as_mut().need_flush() = true;
-        if ready!(self.as_mut().poll_flush(cx)).is_err() || n != i + 1 {
-            return Poll::Ready(Ok(n));
+        dbg!(&written);
+        *written += ready!(inner.as_mut().poll_write(cx, &buf[*written..=i]))?;
+        *need_flush = true;
+        let res = {
+            inner
+                .as_mut()
+                .poll_flush(cx)
+                .map(|res| res.map(|()| *need_flush = false))
+        };
+        dbg!(buf);
+        dbg!(&written);
+        dbg!(res.is_pending());
+        if ready!(res.map(|res| res.is_err())) || *written != i + 1 {
+            return Poll::Ready(Ok(mem::replace(written, 0)));
         }
 
         // At this point we successfully wrote `i + 1` bytes and flushed it out,
@@ -162,9 +185,9 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
         // we can attempt to finish writing the rest of the data provided.
         // Remember though that we ignore errors here as we've successfully
         // written data, so we need to report that.
-        match ready!(self.inner().poll_write(cx, &buf[i + 1..])) {
-            Ok(i) => Poll::Ready(Ok(n + i)),
-            Err(_) => Poll::Ready(Ok(n)),
+        match inner.as_mut().poll_write(cx, &buf[i + 1..]) {
+            Poll::Ready(Ok(i)) => Poll::Ready(Ok(mem::replace(written, 0) + i)),
+            Poll::Ready(Err(_)) | Poll::Pending => Poll::Ready(Ok(mem::replace(written, 0))),
         }
     }
 
