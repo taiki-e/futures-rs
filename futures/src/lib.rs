@@ -301,9 +301,9 @@ pub mod io {
     pub use futures_util::io::{
         AsyncReadExt, AsyncWriteExt, AsyncSeekExt, AsyncBufReadExt, AllowStdIo,
         BufReader, BufWriter, Chain, Close, CopyInto, CopyBufInto, Flush,
-        IntoSink, Lines, Read, ReadExact, ReadHalf, ReadLine, ReadToEnd,
-        ReadToString, ReadUntil, ReadVectored, Seek, Take, Window, Write,
-        WriteAll, WriteHalf, WriteVectored,
+        IntoSink, LineWriter, Lines, Read, ReadExact, ReadHalf, ReadLine,
+        ReadToEnd, ReadToString, ReadUntil, ReadVectored, Seek, Take, Window,
+        Write, WriteAll, WriteHalf, WriteVectored,
     };
 }
 

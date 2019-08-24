@@ -28,8 +28,8 @@ use super::DEFAULT_BUF_SIZE;
 ///
 // TODO: Examples
 pub struct BufWriter<W> {
-    inner: W,
-    buf: Vec<u8>,
+    pub(super) inner: W,
+    pub(super) buf: Vec<u8>,
     written: usize,
 }
 
