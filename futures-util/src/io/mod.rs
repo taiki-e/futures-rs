@@ -52,6 +52,9 @@ mod into_sink;
 #[cfg(feature = "sink")]
 pub use self::into_sink::IntoSink;
 
+mod line_writer;
+pub use self::line_writer::LineWriter;
+
 mod lines;
 pub use self::lines::Lines;
 

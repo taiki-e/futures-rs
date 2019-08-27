@@ -306,7 +306,7 @@ pub mod io {
         BufReader, BufWriter, Chain, Close, CopyInto, CopyBufInto, empty, Empty,
         Flush, IntoSink, Lines, Read, ReadExact, ReadHalf, ReadLine, ReadToEnd,
         ReadToString, ReadUntil, ReadVectored, repeat, Repeat, Seek, sink, Sink,
-        Take, Window, Write, WriteAll, WriteHalf, WriteVectored,
+        Take, Window, Write, WriteAll, WriteHalf, WriteVectored, LineWriter,
     };
 }
 
