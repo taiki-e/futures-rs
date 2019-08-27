@@ -100,7 +100,11 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
         // case flushing fails and we need to try it first next time.
         let n = ready!(self.as_mut().inner().poll_write(cx, &buf[..=i]))?;
         *self.as_mut().need_flush() = true;
-        if ready!(self.as_mut().poll_flush(cx)).is_err() || n != i + 1 {
+        let failed = match self.as_mut().poll_flush(cx) {
+            Poll::Pending => true,
+            Poll::Ready(res) => res.is_err(),
+        };
+        if failed || n != i + 1 {
             return Poll::Ready(Ok(n));
         }
 
@@ -109,9 +113,9 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
         // we can attempt to finish writing the rest of the data provided.
         // Remember though that we ignore errors here as we've successfully
         // written data, so we need to report that.
-        match ready!(self.inner().poll_write(cx, &buf[i + 1..])) {
-            Ok(i) => Poll::Ready(Ok(n + i)),
-            Err(_) => Poll::Ready(Ok(n)),
+        match self.inner().poll_write(cx, &buf[i + 1..]) {
+            Poll::Ready(Ok(i)) => Poll::Ready(Ok(n + i)),
+            Poll::Ready(Err(_)) | Poll::Pending => Poll::Ready(Ok(n)),
         }
     }
 
