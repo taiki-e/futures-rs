@@ -16,7 +16,7 @@ name = "futures_util"
 
 [features]
 default = ["std"]
-std = ["alloc", "futures-core-preview/std", "slab"]
+std = ["alloc", "futures-core-preview/std", "slab", "parking_lot"]
 alloc = ["futures-core-preview/alloc"]
 async-await = []
 compat = ["std", "futures_01"]
@@ -45,6 +45,7 @@ proc-macro-hack = { version = "0.5.9", optional = true }
 proc-macro-nested = { version = "0.1.2", optional = true }
 slab = { version = "0.4", optional = true }
 memchr = { version = "2.2", optional = true }
+parking_lot = { version = "0.9", optional = true }
 futures_01 = { version = "0.1.25", optional = true, package = "futures" }
 tokio-io = { version = "0.1.9", optional = true }
 pin-utils = "0.1.0-alpha.4"

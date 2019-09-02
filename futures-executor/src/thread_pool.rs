@@ -4,12 +4,13 @@ use futures_core::future::{Future, FutureObj};
 use futures_core::task::{Context, Poll, Spawn, SpawnError};
 use futures_util::future::FutureExt;
 use futures_util::task::{ArcWake, waker_ref};
+use parking_lot::Mutex;
 use std::cmp;
 use std::fmt;
 use std::io;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
 use std::thread;
 
 /// A general-purpose thread pool for scheduling tasks that poll futures to
@@ -157,7 +158,7 @@ impl Spawn for &ThreadPool {
 
 impl PoolState {
     fn send(&self, msg: Message) {
-        self.tx.lock().unwrap().send(msg).unwrap();
+        self.tx.lock().send(msg).unwrap();
     }
 
     fn work(&self,
@@ -169,7 +170,7 @@ impl PoolState {
             after_start(idx);
         }
         loop {
-            let msg = self.rx.lock().unwrap().recv().unwrap();
+            let msg = self.rx.lock().recv().unwrap();
             match msg {
                 Message::Run(task) => task.run(),
                 Message::Close => break,

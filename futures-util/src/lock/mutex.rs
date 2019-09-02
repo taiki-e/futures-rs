@@ -1,11 +1,11 @@
 use futures_core::future::{FusedFuture, Future};
 use futures_core::task::{Context, Poll, Waker};
+use parking_lot::Mutex as StdMutex;
 use slab::Slab;
 use std::{fmt, mem};
 use std::cell::UnsafeCell;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
-use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A futures-aware mutex.
@@ -135,7 +135,7 @@ impl<T: ?Sized> Mutex<T> {
 
     fn remove_waker(&self, wait_key: usize, wake_another: bool) {
         if wait_key != WAIT_KEY_NONE {
-            let mut waiters = self.waiters.lock().unwrap();
+            let mut waiters = self.waiters.lock();
             match waiters.remove(wait_key) {
                 Waiter::Waiting(_) => {},
                 Waiter::Woken => {
@@ -201,7 +201,7 @@ impl<'a, T: ?Sized> Future for MutexLockFuture<'a, T> {
         }
 
         {
-            let mut waiters = mutex.waiters.lock().unwrap();
+            let mut waiters = mutex.waiters.lock();
             if self.wait_key == WAIT_KEY_NONE {
                 self.wait_key = waiters.insert(Waiter::Waiting(cx.waker().clone()));
                 if waiters.len() == 1 {
@@ -256,7 +256,7 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         let old_state = self.mutex.state.fetch_and(!IS_LOCKED, Ordering::AcqRel);
         if (old_state & HAS_WAITERS) != 0 {
-            let mut waiters = self.mutex.waiters.lock().unwrap();
+            let mut waiters = self.mutex.waiters.lock();
             if let Some((_i, waiter)) = waiters.iter_mut().next() {
                 waiter.wake();
             }
