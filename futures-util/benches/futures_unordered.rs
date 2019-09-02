@@ -1,7 +1,7 @@
 #![feature(test)]
 
 extern crate test;
-use crate::test::Bencher;
+use test::Bencher;
 
 use futures::channel::oneshot;
 use futures::executor::block_on;
