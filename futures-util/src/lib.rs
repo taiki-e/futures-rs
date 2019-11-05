@@ -101,8 +101,6 @@ pub mod sink;
 
 pub mod task;
 
-pub mod never;
-
 #[cfg(feature = "compat")]
 pub mod compat;
 

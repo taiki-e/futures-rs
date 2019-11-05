@@ -161,10 +161,10 @@ where
 #[cfg(feature = "alloc")]
 mod if_alloc {
     use super::*;
-    use core::convert::Infallible as Never;
+    use core::convert::Infallible;
 
     impl<T> Sink<T> for alloc::vec::Vec<T> {
-        type Error = Never;
+        type Error = Infallible;
 
         fn poll_ready(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
@@ -186,7 +186,7 @@ mod if_alloc {
     }
 
     impl<T> Sink<T> for alloc::collections::VecDeque<T> {
-        type Error = Never;
+        type Error = Infallible;
 
         fn poll_ready(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))

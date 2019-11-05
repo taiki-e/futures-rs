@@ -134,7 +134,7 @@ pub mod executor {
     //! than threads). Tasks spawned onto the pool with the
     //! [`spawn_ok()`](crate::executor::ThreadPool::spawn_ok)
     //! function will run on ambiently on the created threads.
-    //! 
+    //!
     //! # Spawning additional tasks
     //!
     //! Tasks can be spawned onto a spawner by calling its
@@ -464,14 +464,6 @@ pub mod task {
 
     #[cfg_attr(feature = "cfg-target-has-atomic", cfg(target_has_atomic = "ptr"))]
     pub use futures_util::task::AtomicWaker;
-}
-
-pub mod never {
-    //! This module contains the `Never` type.
-    //!
-    //! Values of this type can never be created and will never exist.
-
-    pub use futures_util::never::Never;
 }
 
 // proc-macro re-export --------------------------------------

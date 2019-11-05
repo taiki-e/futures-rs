@@ -1,4 +1,4 @@
-use crate::never::Never;
+use core::convert::Infallible;
 use core::marker::PhantomData;
 use core::pin::Pin;
 use futures_core::task::{Context, Poll};
@@ -23,7 +23,7 @@ pub struct Drain<T> {
 ///
 /// let mut drain = sink::drain();
 /// drain.send(5).await?;
-/// # Ok::<(), futures::never::Never>(()) }).unwrap();
+/// # Ok::<(), std::convert::Infallible>(()) }).unwrap();
 /// ```
 pub fn drain<T>() -> Drain<T> {
     Drain { marker: PhantomData }
@@ -32,7 +32,7 @@ pub fn drain<T>() -> Drain<T> {
 impl<T> Unpin for Drain<T> {}
 
 impl<T> Sink<T> for Drain<T> {
-    type Error = Never;
+    type Error = Infallible;
 
     fn poll_ready(
         self: Pin<&mut Self>,

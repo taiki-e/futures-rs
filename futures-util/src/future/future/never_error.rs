@@ -1,4 +1,4 @@
-use crate::never::Never;
+use core::convert::Infallible;
 use core::pin::Pin;
 use futures_core::future::{FusedFuture, Future};
 use futures_core::task::{self, Poll};
@@ -28,7 +28,7 @@ impl<Fut: FusedFuture> FusedFuture for NeverError<Fut> {
 impl<Fut, T> Future for NeverError<Fut>
     where Fut: Future<Output = T>,
 {
-    type Output = Result<T, Never>;
+    type Output = Result<T, Infallible>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         self.future().poll(cx).map(Ok)
