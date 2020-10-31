@@ -8,10 +8,28 @@ use futures_core::task::{Context, Poll};
 pub struct Ready<T>(Option<T>);
 
 impl<T> Ready<T> {
+    /// Gets a reference to the value from this immediately ready future.
+    #[inline]
+    pub fn get_ref(&self) -> &T {
+        self.0
+            .as_ref()
+            .expect("Ready::get_ref called after completion")
+    }
+
+    /// Gets a mutable reference to the value from this immediately ready future.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut T {
+        self.0
+            .as_mut()
+            .expect("Ready::get_mut called after completion")
+    }
+
     /// Unwraps the value from this immediately ready future.
     #[inline]
     pub fn into_inner(mut self) -> T {
-        self.0.take().unwrap()
+        self.0
+            .take()
+            .expect("Ready::into_inner called after completion")
     }
 }
 
