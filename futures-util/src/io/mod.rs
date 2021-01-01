@@ -169,7 +169,7 @@ pub trait AsyncReadExt: AsyncRead {
         Chain::new(self, next)
     }
 
-    /// Tries to read some bytes directly into the given `buf` in asynchronous
+    /// Attempts to read some bytes directly into the given `buf` in asynchronous
     /// manner, returning a future type.
     ///
     /// The returned future will resolve to the number of bytes read once the read

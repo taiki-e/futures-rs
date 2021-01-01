@@ -1014,7 +1014,7 @@ impl<T> Receiver<T> {
         }
     }
 
-    /// Tries to receive the next message without notifying a context if empty.
+    /// Attempts to receive the next message without notifying a context if empty.
     ///
     /// It is not recommended to call this function from inside of a future,
     /// only when you've otherwise arranged to be notified when the channel is
@@ -1144,7 +1144,7 @@ impl<T> UnboundedReceiver<T> {
         }
     }
 
-    /// Tries to receive the next message without notifying a context if empty.
+    /// Attempts to receive the next message without notifying a context if empty.
     ///
     /// It is not recommended to call this function from inside of a future,
     /// only when you've otherwise arranged to be notified when the channel is
