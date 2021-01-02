@@ -24,6 +24,7 @@ fn works_1() {
     assert_eq!(None, iter.next());
 }
 
+#[cfg_attr(miri, ignore)] // vtable not supported on type Pin<&mut dyn ...>
 #[test]
 fn works_2() {
     use futures::channel::oneshot;
@@ -64,6 +65,7 @@ fn from_iterator() {
     assert_eq!(block_on(stream.collect::<Vec<_>>()), vec![1,2,3]);
 }
 
+#[cfg_attr(miri, ignore)] // vtable not supported on type Pin<&mut dyn ...>
 #[test]
 fn queue_never_unblocked() {
     use futures::channel::oneshot;

@@ -4,6 +4,7 @@ use std::time::Instant;
 use futures::prelude::*;
 use futures::compat::Future01CompatExt;
 
+#[cfg_attr(miri, ignore)] // unsupported operation: can't call foreign function: kqueue
 #[test]
 fn can_use_01_futures_in_a_03_future_running_on_a_01_executor() {
     let f = async {

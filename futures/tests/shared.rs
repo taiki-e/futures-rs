@@ -106,6 +106,7 @@ fn drop_in_poll() {
     assert_eq!(block_on(future1), 1);
 }
 
+#[cfg_attr(miri, ignore)] // vtable not supported on type Pin<&mut dyn ...>
 #[test]
 fn peek() {
     use futures::channel::oneshot;

@@ -1,3 +1,4 @@
+#[cfg_attr(miri, ignore)] // thread support is experimental
 #[test]
 fn basic() {
     use std::sync::atomic::AtomicUsize;

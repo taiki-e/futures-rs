@@ -106,6 +106,7 @@ fn dropping_ready_queue() {
     }));
 }
 
+#[cfg_attr(miri, ignore)] // thread support is experimental
 #[test]
 fn stress() {
     use futures::channel::oneshot;

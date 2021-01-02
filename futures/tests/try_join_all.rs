@@ -1,3 +1,5 @@
+#![cfg(not(miri))] // vtable not supported on type Pin<&mut dyn ...>
+
 mod util {
     use std::future::Future;
     use futures::executor::block_on;

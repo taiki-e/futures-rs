@@ -13,6 +13,7 @@ fn ready() {
     }))
 }
 
+#[cfg_attr(miri, ignore)] // vtable not supported on type Pin<&mut dyn ...>
 #[test]
 fn poll() {
     use futures::{

@@ -33,6 +33,7 @@ fn mutex_wakes_waiters() {
     assert!(waiter.poll_unpin(&mut panic_context()).is_ready());
 }
 
+#[cfg_attr(miri, ignore)] // vtable not supported on type Pin<&mut dyn ...>
 #[test]
 fn mutex_contested() {
     use futures::channel::mpsc;

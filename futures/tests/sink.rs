@@ -351,6 +351,7 @@ fn mpsc_blocking_start_send() {
 
 // test `flush` by using `with` to make the first insertion into a sink block
 // until a oneshot is completed
+#[cfg_attr(miri, ignore)] // vtable not supported on type Pin<&mut dyn ...>
 #[test]
 fn with_flush() {
     use futures::channel::oneshot;

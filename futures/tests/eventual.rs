@@ -1,3 +1,5 @@
+#![cfg(not(miri))] // vtable not supported on type Pin<&mut dyn ...>
+
 use futures::channel::oneshot;
 use futures::executor::ThreadPool;
 use futures::future::{self, ok, Future, FutureExt, TryFutureExt};
