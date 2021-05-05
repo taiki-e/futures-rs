@@ -30,6 +30,9 @@ futures-sink = { path = "../futures-sink", version = "=0.4.0-alpha.0", default-f
 futures = { path = "../futures", default-features = true }
 futures-test = { path = "../futures-test", default-features = true }
 
+[target.'cfg(futures_loom)'.dev-dependencies]
+loom = "0.5"
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

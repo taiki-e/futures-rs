@@ -4,10 +4,9 @@
 //! thing that ever blocks, so this is assisted with a fast user-space
 //! implementation of a lock that can only have a `try_lock` operation.
 
-use core::cell::UnsafeCell;
+use crate::primitive::{cell::UnsafeCell, sync::atomic::AtomicBool};
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::Ordering::SeqCst;
-use core::sync::atomic::AtomicBool;
 
 /// A "mutex" around a value, similar to `std::sync::Mutex<T>`.
 ///
@@ -37,10 +36,7 @@ unsafe impl<T: Send> Sync for Lock<T> {}
 impl<T> Lock<T> {
     /// Creates a new lock around the given value.
     pub(crate) fn new(t: T) -> Self {
-        Self {
-            locked: AtomicBool::new(false),
-            data: UnsafeCell::new(t),
-        }
+        Self { locked: AtomicBool::new(false), data: UnsafeCell::new(t) }
     }
 
     /// Attempts to acquire this lock, returning whether the lock was acquired or
@@ -66,7 +62,7 @@ impl<T> Deref for TryLock<'_, T> {
     fn deref(&self) -> &T {
         // The existence of `TryLock` represents that we own the lock, so we
         // can safely access the data here.
-        unsafe { &*self.__ptr.data.get() }
+        unsafe { self.__ptr.data.with(|data| &*data) }
     }
 }
 
@@ -77,7 +73,7 @@ impl<T> DerefMut for TryLock<'_, T> {
         //
         // Additionally, we're the *only* `TryLock` in existence so mutable
         // access should be ok.
-        unsafe { &mut *self.__ptr.data.get() }
+        unsafe { self.__ptr.data.with_mut(|data| &mut *data) }
     }
 }
 
