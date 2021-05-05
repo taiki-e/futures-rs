@@ -78,16 +78,18 @@
 // happens-before semantics required for the acquire / release semantics used
 // by the queue structure.
 
-use crate::primitive::sync::{
-    atomic::{AtomicUsize, Ordering::SeqCst},
-    Arc, Mutex,
+use crate::primitive::{
+    sync::{
+        atomic::{AtomicUsize, Ordering::SeqCst},
+        Arc, Mutex,
+    },
+    thread,
 };
 use futures_core::stream::{FusedStream, Stream};
 use futures_core::task::__internal::AtomicWaker;
 use futures_core::task::{Context, Poll, Waker};
 use std::fmt;
 use std::pin::Pin;
-use std::thread;
 
 use crate::mpsc::queue::Queue;
 

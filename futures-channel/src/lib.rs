@@ -71,6 +71,9 @@ mod primitive {
         // https://github.com/tokio-rs/loom/issues/156
         pub(crate) use std::sync::{Arc, Weak};
     }
+    pub(crate) mod thread {
+        pub(crate) use loom::thread::*;
+    }
     pub(crate) use loom::thread_local;
 }
 #[cfg(not(futures_loom))]
@@ -117,6 +120,7 @@ mod primitive {
         #[cfg(feature = "std")]
         pub(crate) use std::sync::Mutex;
     }
+    pub(crate) use std::thread;
     #[cfg(feature = "std")]
     pub(crate) use std::thread_local;
 }

@@ -44,11 +44,10 @@
 pub(super) use self::PopResult::*;
 
 use crate::primitive::{
-    cell::UnsafeCell,
     sync::atomic::{AtomicPtr, Ordering},
+    thread,
 };
 use std::ptr;
-use std::thread;
 
 /// A result of the `pop` function.
 pub(super) enum PopResult<T> {
@@ -75,7 +74,7 @@ struct Node<T> {
 #[derive(Debug)]
 pub(super) struct Queue<T> {
     head: AtomicPtr<Node<T>>,
-    tail: UnsafeCell<*mut Node<T>>,
+    tail: AtomicPtr<Node<T>>,
 }
 
 unsafe impl<T: Send> Send for Queue<T> {}
@@ -92,7 +91,7 @@ impl<T> Queue<T> {
     /// one consumer.
     pub(super) fn new() -> Self {
         let stub = unsafe { Node::new(None) };
-        Self { head: AtomicPtr::new(stub), tail: UnsafeCell::new(stub) }
+        Self { head: AtomicPtr::new(stub), tail: AtomicPtr::new(stub) }
     }
 
     /// Pushes a new value onto this queue.
@@ -117,11 +116,11 @@ impl<T> Queue<T> {
     ///
     /// This function is unsafe because only one thread can call it at a time.
     pub(super) unsafe fn pop(&self) -> PopResult<T> {
-        let tail = self.tail.with_mut(|t| *t);
+        let tail = self.tail.load(Ordering::Relaxed);
         let next = (*tail).next.load(Ordering::Acquire);
 
         if !next.is_null() {
-            self.tail.with_mut(|t| *t = next);
+            self.tail.store(next, Ordering::Relaxed);
             assert!((*tail).value.is_none());
             assert!((*next).value.is_some());
             let ret = (*next).value.take().unwrap();
@@ -167,7 +166,7 @@ impl<T> Queue<T> {
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         unsafe {
-            let mut cur = self.tail.with_mut(|t| *t);
+            let mut cur = self.tail.load(Ordering::Relaxed);
             while !cur.is_null() {
                 let next = (*cur).next.load(Ordering::Relaxed);
                 drop(Box::from_raw(cur));
