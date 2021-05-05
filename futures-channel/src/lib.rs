@@ -45,8 +45,8 @@ mod primitive {
     }
     pub(crate) mod sync {
         pub(crate) mod atomic {
-            use core::sync::atomic::Ordering;
-            pub(crate) use loom::sync::atomic::AtomicUsize;
+            pub(crate) use core::sync::atomic::Ordering;
+            pub(crate) use loom::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize};
             pub(crate) fn fence(ord: Ordering) {
                 if let Ordering::Acquire = ord {
                 } else {
@@ -67,7 +67,9 @@ mod primitive {
             // but it's the best we can do for the time being.
             pub(crate) use self::fence as compiler_fence;
         }
-        pub(crate) use loom::sync::{Arc, Mutex, Weak};
+        pub(crate) use loom::sync::Mutex;
+        // https://github.com/tokio-rs/loom/issues/156
+        pub(crate) use std::sync::{Arc, Weak};
     }
     pub(crate) use loom::thread_local;
 }
@@ -106,7 +108,7 @@ mod primitive {
     pub(crate) mod sync {
         pub(crate) mod atomic {
             pub(crate) use core::sync::atomic::{
-                compiler_fence, fence, AtomicBool, AtomicPtr, AtomicUsize,
+                compiler_fence, fence, AtomicBool, AtomicPtr, AtomicUsize, Ordering,
             };
         }
         cfg_target_has_atomic! {

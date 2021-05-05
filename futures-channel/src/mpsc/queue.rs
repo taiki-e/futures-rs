@@ -43,10 +43,12 @@
 
 pub(super) use self::PopResult::*;
 
-use std::thread;
-use std::cell::UnsafeCell;
+use crate::primitive::{
+    cell::UnsafeCell,
+    sync::atomic::{AtomicPtr, Ordering},
+};
 use std::ptr;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::thread;
 
 /// A result of the `pop` function.
 pub(super) enum PopResult<T> {
@@ -76,15 +78,12 @@ pub(super) struct Queue<T> {
     tail: UnsafeCell<*mut Node<T>>,
 }
 
-unsafe impl<T: Send> Send for Queue<T> { }
-unsafe impl<T: Send> Sync for Queue<T> { }
+unsafe impl<T: Send> Send for Queue<T> {}
+unsafe impl<T: Send> Sync for Queue<T> {}
 
 impl<T> Node<T> {
     unsafe fn new(v: Option<T>) -> *mut Self {
-        Box::into_raw(Box::new(Self {
-            next: AtomicPtr::new(ptr::null_mut()),
-            value: v,
-        }))
+        Box::into_raw(Box::new(Self { next: AtomicPtr::new(ptr::null_mut()), value: v }))
     }
 }
 
@@ -93,10 +92,7 @@ impl<T> Queue<T> {
     /// one consumer.
     pub(super) fn new() -> Self {
         let stub = unsafe { Node::new(None) };
-        Self {
-            head: AtomicPtr::new(stub),
-            tail: UnsafeCell::new(stub),
-        }
+        Self { head: AtomicPtr::new(stub), tail: UnsafeCell::new(stub) }
     }
 
     /// Pushes a new value onto this queue.
@@ -121,11 +117,11 @@ impl<T> Queue<T> {
     ///
     /// This function is unsafe because only one thread can call it at a time.
     pub(super) unsafe fn pop(&self) -> PopResult<T> {
-        let tail = *self.tail.get();
+        let tail = self.tail.with_mut(|t| *t);
         let next = (*tail).next.load(Ordering::Acquire);
 
         if !next.is_null() {
-            *self.tail.get() = next;
+            self.tail.with_mut(|t| *t = next);
             assert!((*tail).value.is_none());
             assert!((*next).value.is_some());
             let ret = (*next).value.take().unwrap();
@@ -133,7 +129,11 @@ impl<T> Queue<T> {
             return Data(ret);
         }
 
-        if self.head.load(Ordering::Acquire) == tail {Empty} else {Inconsistent}
+        if self.head.load(Ordering::Acquire) == tail {
+            Empty
+        } else {
+            Inconsistent
+        }
     }
 
     /// Pop an element similarly to `pop` function, but spin-wait on inconsistent
@@ -167,7 +167,7 @@ impl<T> Queue<T> {
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         unsafe {
-            let mut cur = *self.tail.get();
+            let mut cur = self.tail.with_mut(|t| *t);
             while !cur.is_null() {
                 let next = (*cur).next.load(Ordering::Relaxed);
                 drop(Box::from_raw(cur));

@@ -2,12 +2,13 @@
 //!
 //! This is a single-producer, single-consumer channel.
 
-use alloc::sync::Arc;
+use crate::primitive::sync::{
+    atomic::{AtomicBool, Ordering::SeqCst},
+    Arc,
+};
 use core::fmt;
 use core::pin::Pin;
-use core::sync::atomic::AtomicBool;
-use core::sync::atomic::Ordering::SeqCst;
-use futures_core::future::{Future, FusedFuture};
+use futures_core::future::{FusedFuture, Future};
 use futures_core::task::{Context, Poll, Waker};
 
 use crate::lock::Lock;
@@ -106,12 +107,8 @@ struct Inner<T> {
 /// ```
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let inner = Arc::new(Inner::new());
-    let receiver = Receiver {
-        inner: inner.clone(),
-    };
-    let sender = Sender {
-        inner,
-    };
+    let receiver = Receiver { inner: inner.clone() };
+    let sender = Sender { inner };
     (sender, receiver)
 }
 
@@ -127,7 +124,7 @@ impl<T> Inner<T> {
 
     fn send(&self, t: T) -> Result<(), T> {
         if self.complete.load(SeqCst) {
-            return Err(t)
+            return Err(t);
         }
 
         // Note that this lock acquisition may fail if the receiver
@@ -164,7 +161,7 @@ impl<T> Inner<T> {
         // destructor, but our destructor hasn't run yet so if it's set then the
         // oneshot is gone.
         if self.complete.load(SeqCst) {
-            return Poll::Ready(())
+            return Poll::Ready(());
         }
 
         // If our other half is not gone then we need to park our current task
@@ -273,7 +270,10 @@ impl<T> Inner<T> {
         } else {
             let task = cx.waker().clone();
             match self.rx_task.try_lock() {
-                Some(mut slot) => { *slot = Some(task); false },
+                Some(mut slot) => {
+                    *slot = Some(task);
+                    false
+                }
                 None => true,
             }
         };
@@ -453,10 +453,7 @@ impl<T> Receiver<T> {
 impl<T> Future for Receiver<T> {
     type Output = Result<T, Canceled>;
 
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<T, Canceled>> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<T, Canceled>> {
         self.inner.recv(cx)
     }
 }
