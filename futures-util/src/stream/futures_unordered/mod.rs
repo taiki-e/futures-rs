@@ -3,12 +3,14 @@
 //! This module is only available when the `std` or `alloc` feature of this
 //! library is activated, and it is activated by default.
 
-use futures_core::future::Future;
-use futures_core::stream::{FusedStream, Stream};
-use futures_core::task::{Context, Poll};
-use futures_task::{FutureObj, LocalFutureObj, Spawn, LocalSpawn, SpawnError};
+use crate::primitive::{
+    cell::UnsafeCell,
+    sync::{
+        atomic::{AtomicBool, AtomicPtr},
+        Arc, Weak,
+    },
+};
 use crate::task::AtomicWaker;
-use core::cell::UnsafeCell;
 use core::fmt::{self, Debug};
 use core::iter::FromIterator;
 use core::marker::PhantomData;
@@ -16,8 +18,10 @@ use core::mem;
 use core::pin::Pin;
 use core::ptr;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release, SeqCst};
-use core::sync::atomic::{AtomicPtr, AtomicBool};
-use alloc::sync::{Arc, Weak};
+use futures_core::future::Future;
+use futures_core::stream::{FusedStream, Stream};
+use futures_core::task::{Context, Poll};
+use futures_task::{FutureObj, LocalFutureObj, LocalSpawn, Spawn, SpawnError};
 
 mod abort;
 
@@ -28,8 +32,7 @@ mod task;
 use self::task::Task;
 
 mod ready_to_run_queue;
-use self::ready_to_run_queue::{ReadyToRunQueue, Dequeue};
-
+use self::ready_to_run_queue::{Dequeue, ReadyToRunQueue};
 
 /// A set of futures which may complete in any order.
 ///
@@ -63,18 +66,14 @@ unsafe impl<Fut: Sync> Sync for FuturesUnordered<Fut> {}
 impl<Fut> Unpin for FuturesUnordered<Fut> {}
 
 impl Spawn for FuturesUnordered<FutureObj<'_, ()>> {
-    fn spawn_obj(&self, future_obj: FutureObj<'static, ()>)
-        -> Result<(), SpawnError>
-    {
+    fn spawn_obj(&self, future_obj: FutureObj<'static, ()>) -> Result<(), SpawnError> {
         self.push(future_obj);
         Ok(())
     }
 }
 
 impl LocalSpawn for FuturesUnordered<LocalFutureObj<'_, ()>> {
-    fn spawn_local_obj(&self, future_obj: LocalFutureObj<'static, ()>)
-        -> Result<(), SpawnError>
-    {
+    fn spawn_local_obj(&self, future_obj: LocalFutureObj<'static, ()>) -> Result<(), SpawnError> {
         self.push(future_obj);
         Ok(())
     }
@@ -191,7 +190,10 @@ impl<Fut> FuturesUnordered<Fut> {
     }
 
     /// Returns an iterator that allows inspecting each future in the set.
-    pub fn iter(&self) -> Iter<'_, Fut> where Fut: Unpin {
+    pub fn iter(&self) -> Iter<'_, Fut>
+    where
+        Fut: Unpin,
+    {
         Iter(Pin::new(self).iter_pin_ref())
     }
 
@@ -199,16 +201,14 @@ impl<Fut> FuturesUnordered<Fut> {
     fn iter_pin_ref(self: Pin<&Self>) -> IterPinRef<'_, Fut> {
         let (task, len) = self.atomic_load_head_and_len_all();
 
-        IterPinRef {
-            task,
-            len,
-            pending_next_all: self.pending_next_all(),
-            _marker: PhantomData,
-        }
+        IterPinRef { task, len, pending_next_all: self.pending_next_all(), _marker: PhantomData }
     }
 
     /// Returns an iterator that allows modifying each future in the set.
-    pub fn iter_mut(&mut self) -> IterMut<'_, Fut> where Fut: Unpin {
+    pub fn iter_mut(&mut self) -> IterMut<'_, Fut>
+    where
+        Fut: Unpin,
+    {
         IterMut(Pin::new(self).iter_pin_mut())
     }
 
@@ -217,19 +217,9 @@ impl<Fut> FuturesUnordered<Fut> {
         // `head_all` can be accessed directly and we don't need to spin on
         // `Task::next_all` since we have exclusive access to the set.
         let task = *self.head_all.get_mut();
-        let len = if task.is_null() {
-            0
-        } else {
-            unsafe {
-                *(*task).len_all.get()
-            }
-        };
+        let len = if task.is_null() { 0 } else { unsafe { (*task).len_all.with(|len| *len) } };
 
-        IterPinMut {
-            task,
-            len,
-            _marker: PhantomData
-        }
+        IterPinMut { task, len, _marker: PhantomData }
     }
 
     /// Returns the current head node and number of futures in the list of all
@@ -242,7 +232,7 @@ impl<Fut> FuturesUnordered<Fut> {
         } else {
             unsafe {
                 (*task).spin_next_all(self.pending_next_all(), Acquire);
-                *(*task).len_all.get()
+                (*task).len_all.with(|len| *len)
             }
         };
 
@@ -256,7 +246,7 @@ impl<Fut> FuturesUnordered<Fut> {
         // `release_task` must only be called on unlinked tasks
         debug_assert_eq!(task.next_all.load(Relaxed), self.pending_next_all());
         unsafe {
-            debug_assert!((*task.prev_all.get()).is_null());
+            task.prev_all.with(|p| debug_assert!(p.is_null()));
         }
 
         // The future is done, try to reset the queued flag. This will prevent
@@ -270,7 +260,7 @@ impl<Fut> FuturesUnordered<Fut> {
         unsafe {
             // Set to `None` rather than `take()`ing to prevent moving the
             // future.
-            *task.future.get() = None;
+            task.future.with_mut(|f| *f = None);
         }
 
         // If the queued flag was previously set, then it means that this task
@@ -308,9 +298,9 @@ impl<Fut> FuturesUnordered<Fut> {
                 // Make sure `next_all` has been written to signal that it is
                 // safe to read `len_all`.
                 (*next).spin_next_all(self.pending_next_all(), Acquire);
-                *(*next).len_all.get() + 1
+                (*next).len_all.with(|len| *len + 1)
             };
-            *(*ptr).len_all.get() = new_len;
+            (*ptr).len_all.with_mut(|len| *len = new_len);
 
             // Write the old head as the next node pointer, signaling to other
             // threads that `len_all` and `next_all` are ready to read.
@@ -319,7 +309,7 @@ impl<Fut> FuturesUnordered<Fut> {
             // `prev_all` updates don't need to be synchronized, as the field is
             // only ever used after exclusive access has been acquired.
             if !next.is_null() {
-                *(*next).prev_all.get() = ptr;
+                (*next).prev_all.with_mut(|p| *p = ptr);
             }
         }
 
@@ -335,7 +325,7 @@ impl<Fut> FuturesUnordered<Fut> {
         // and won't be able to retrieve the correct length later.
         let head = *self.head_all.get_mut();
         debug_assert!(!head.is_null());
-        let new_len = *(*head).len_all.get() - 1;
+        let new_len = (*head).len_all.with(|len| *len) - 1;
 
         let task = Arc::from_raw(task);
         let next = task.next_all.load(Relaxed);
@@ -395,9 +385,7 @@ impl<Fut> FuturesUnordered<Fut> {
 impl<Fut: Future> Stream for FuturesUnordered<Fut> {
     type Item = Fut::Output;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Option<Self::Item>>
-    {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Variable to determine how many times it is allowed to poll underlying
         // futures without yielding.
         //
@@ -469,14 +457,11 @@ impl<Fut: Future> Stream for FuturesUnordered<Fut> {
 
                     // Double check that the call to `release_task` really
                     // happened. Calling it required the task to be unlinked.
-                    debug_assert_eq!(
-                        task.next_all.load(Relaxed),
-                        self.pending_next_all()
-                    );
+                    debug_assert_eq!(task.next_all.load(Relaxed), self.pending_next_all());
                     unsafe {
                         debug_assert!((*task.prev_all.get()).is_null());
                     }
-                    continue
+                    continue;
                 }
             };
 
@@ -516,10 +501,7 @@ impl<Fut: Future> Stream for FuturesUnordered<Fut> {
                 }
             }
 
-            let mut bomb = Bomb {
-                task: Some(task),
-                queue: &mut *self,
-            };
+            let mut bomb = Bomb { task: Some(task), queue: &mut *self };
 
             // Poll the underlying future with the appropriate waker
             // implementation. This is where a large bit of the unsafety
@@ -555,11 +537,9 @@ impl<Fut: Future> Stream for FuturesUnordered<Fut> {
                         cx.waker().wake_by_ref();
                         return Poll::Pending;
                     }
-                    continue
+                    continue;
                 }
-                Poll::Ready(output) => {
-                    return Poll::Ready(Some(output))
-                }
+                Poll::Ready(output) => return Poll::Ready(Some(output)),
             }
         }
     }
@@ -611,7 +591,10 @@ impl<Fut> FromIterator<Fut> for FuturesUnordered<Fut> {
         I: IntoIterator<Item = Fut>,
     {
         let acc = Self::new();
-        iter.into_iter().fold(acc, |acc, item| { acc.push(item); acc })
+        iter.into_iter().fold(acc, |acc, item| {
+            acc.push(item);
+            acc
+        })
     }
 }
 

@@ -1,11 +1,15 @@
-use core::cell::UnsafeCell;
-use core::sync::atomic::{AtomicPtr, AtomicBool};
+use crate::primitive::{
+    cell::UnsafeCell,
+    sync::{
+        atomic::{AtomicBool, AtomicPtr},
+        Arc, Weak,
+    },
+};
 use core::sync::atomic::Ordering::{self, SeqCst};
-use alloc::sync::{Arc, Weak};
 
-use crate::task::{ArcWake, WakerRef, waker_ref};
-use super::ReadyToRunQueue;
 use super::abort::abort;
+use super::ReadyToRunQueue;
+use crate::task::{waker_ref, ArcWake, WakerRef};
 
 pub(super) struct Task<Fut> {
     // The future

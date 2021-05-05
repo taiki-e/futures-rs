@@ -1,9 +1,13 @@
+use crate::primitive::{
+    cell::UnsafeCell,
+    sync::{
+        atomic::{AtomicBool, AtomicPtr},
+        Arc,
+    },
+};
 use crate::task::AtomicWaker;
-use core::cell::UnsafeCell;
 use core::ptr;
-use core::sync::atomic::AtomicPtr;
-use core::sync::atomic::Ordering::{Relaxed, Acquire, Release, AcqRel};
-use alloc::sync::Arc;
+use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 use super::abort::abort;
 use super::task::Task;
@@ -55,13 +59,13 @@ impl<Fut> ReadyToRunQueue<Fut> {
                 return Dequeue::Empty;
             }
 
-            *self.tail.get() = next;
+            self.tail.with_mut(|tail| *tail = next);
             tail = next;
             next = (*next).next_ready_to_run.load(Acquire);
         }
 
         if !next.is_null() {
-            *self.tail.get() = next;
+            self.tail.with_mut(|tail| *tail = next);
             debug_assert!(tail != self.stub());
             return Dequeue::Data(tail);
         }
@@ -75,7 +79,7 @@ impl<Fut> ReadyToRunQueue<Fut> {
         next = (*tail).next_ready_to_run.load(Acquire);
 
         if !next.is_null() {
-            *self.tail.get() = next;
+            self.tail.with_mut(|tail| *tail = next);
             return Dequeue::Data(tail);
         }
 
