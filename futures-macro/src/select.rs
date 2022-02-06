@@ -268,6 +268,7 @@ fn select_inner(input: TokenStream, random: bool) -> TokenStream {
             match __select_result {
                 __futures_crate::task::Poll::Ready(result) => match result {
                     #branches
+                    _ => #default_expr
                 },
                 _ => #default_expr
             }
