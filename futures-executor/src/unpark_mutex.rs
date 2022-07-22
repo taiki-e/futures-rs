@@ -1,6 +1,5 @@
 use std::cell::UnsafeCell;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::SeqCst;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A "lock" around data `D`, which employs a *helping* strategy.
 ///
@@ -54,12 +53,17 @@ impl<D> UnparkMutex<D> {
     /// that polling is not necessary (because the task is finished or the
     /// polling has been delegated).
     pub(crate) fn notify(&self) -> Result<D, ()> {
-        let mut status = self.status.load(SeqCst);
+        let mut status = self.status.load(Ordering::Acquire);
         loop {
             match status {
                 // The task is idle, so try to run it immediately.
                 WAITING => {
-                    match self.status.compare_exchange(WAITING, POLLING, SeqCst, SeqCst) {
+                    match self.status.compare_exchange(
+                        WAITING,
+                        POLLING,
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    ) {
                         Ok(_) => {
                             let data = unsafe {
                                 // SAFETY: we've ensured mutual exclusion via
@@ -78,10 +82,17 @@ impl<D> UnparkMutex<D> {
 
                 // The task is being polled, so we need to record that it should
                 // be *repolled* when complete.
-                POLLING => match self.status.compare_exchange(POLLING, REPOLL, SeqCst, SeqCst) {
-                    Ok(_) => return Err(()),
-                    Err(cur) => status = cur,
-                },
+                POLLING => {
+                    match self.status.compare_exchange(
+                        POLLING,
+                        REPOLL,
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    ) {
+                        Ok(_) => return Err(()),
+                        Err(cur) => status = cur,
+                    }
+                }
 
                 // The task is already scheduled for polling, or is complete, so
                 // we've got nothing to do.
@@ -98,7 +109,7 @@ impl<D> UnparkMutex<D> {
     /// Callable only from the `POLLING`/`REPOLL` states, i.e. between
     /// successful calls to `notify` and `wait`/`complete`.
     pub(crate) unsafe fn start_poll(&self) {
-        self.status.store(POLLING, SeqCst);
+        self.status.store(POLLING, Ordering::Release);
     }
 
     /// Alert the mutex that polling completed with `Pending`.
@@ -110,7 +121,7 @@ impl<D> UnparkMutex<D> {
     pub(crate) unsafe fn wait(&self, data: D) -> Result<(), D> {
         *self.inner.get() = Some(data);
 
-        match self.status.compare_exchange(POLLING, WAITING, SeqCst, SeqCst) {
+        match self.status.compare_exchange(POLLING, WAITING, Ordering::AcqRel, Ordering::Acquire) {
             // no unparks came in while we were running
             Ok(_) => Ok(()),
 
@@ -118,7 +129,7 @@ impl<D> UnparkMutex<D> {
             // state and run again.
             Err(status) => {
                 assert_eq!(status, REPOLL);
-                self.status.store(POLLING, SeqCst);
+                self.status.store(POLLING, Ordering::Release);
                 Err((*self.inner.get()).take().unwrap())
             }
         }
@@ -132,6 +143,6 @@ impl<D> UnparkMutex<D> {
     /// Callable only from the `POLLING`/`REPOLL` states, i.e. between
     /// successful calls to `notify` and `wait`/`complete`.
     pub(crate) unsafe fn complete(&self) {
-        self.status.store(COMPLETE, SeqCst);
+        self.status.store(COMPLETE, Ordering::Release);
     }
 }
